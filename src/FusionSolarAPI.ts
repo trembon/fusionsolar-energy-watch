@@ -1,52 +1,6 @@
-// FusionSolarAPI.ts
-import axios, { AxiosResponse } from 'axios';
-import { URL } from 'url'; // Node.js built-in
-import { format } from 'date-fns'; // For date formatting
-import { encryptPassword, generateNonce } from './secrets';
-import { json } from 'stream/consumers';
+import { URL } from 'url';
+import { encryptPassword, generateNonce } from './utils';
 
-// --- Enums ---
-export enum DeviceType {
-    SENSOR_KW = 'sensor',
-    SENSOR_KWH = 'sensor_kwh',
-    SENSOR_PERCENTAGE = 'sensor_percentage',
-    SENSOR_TIME = 'sensor_time',
-}
-
-export enum ENERGY_BALANCE_CALL_TYPE {
-    DAY = '2',
-    PREVIOUS_MONTH = '3',
-    MONTH = '4',
-    YEAR = '5',
-    LIFETIME = '6',
-}
-
-// --- Device type ---
-export interface Device {
-    device_id: string;
-    device_unique_id: string;
-    device_type: DeviceType;
-    name: string;
-    state: number | string | Date;
-    icon: string;
-}
-
-// --- Example Devices List (port of DEVICES in Python) ---
-export const DEVICES: Array<{ id: string; type: DeviceType; icon: string }> = [
-    {
-        id: 'House Load Power',
-        type: DeviceType.SENSOR_KW,
-        icon: 'mdi:home-lightning-bolt-outline',
-    },
-    {
-        id: 'House Load Today',
-        type: DeviceType.SENSOR_KWH,
-        icon: 'mdi:home-lightning-bolt-outline',
-    },
-    // ... add the rest from Python here
-];
-
-// --- Main FusionSolarAPI class ---
 export class FusionSolarAPI {
     private user: string;
     private pwd: string;
@@ -73,16 +27,16 @@ export class FusionSolarAPI {
         const publicKeyUrl = `https://${this.login_host}/unisso/pubkey`;
         console.debug(`Getting Public Key at: ${publicKeyUrl}`);
 
-        let response: AxiosResponse;
+        let response: Response;
         try {
-            response = await axios.get(publicKeyUrl);
+            response = await fetch(publicKeyUrl);
         } catch (err) {
             console.error('Error fetching public key:', err);
             this.connected = false;
             return false;
         }
 
-        const pubkeyData = response.data;
+        const pubkeyData = await response.json();
         console.debug('Pubkey Response:', pubkeyData);
 
         const pubKeyPem = pubkeyData.pubKey;
@@ -100,7 +54,8 @@ export class FusionSolarAPI {
         };
 
         try {
-            const loginResp = await axios.post(loginUrl, payload, {
+            const loginResp = await fetch(loginUrl, {
+                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'accept-encoding': 'gzip, deflate, br, zstd',
@@ -110,17 +65,19 @@ export class FusionSolarAPI {
                     origin: `https://${this.login_host}`,
                     referer: `https://${this.login_host}/unisso/login.action`,
                 },
+                body: JSON.stringify(payload),
             });
+            const loginRespData = await loginResp.json();
 
-            console.debug('Login Response:', loginResp.status, loginResp.data, loginResp.headers);
+            console.debug('Login Response:', loginResp.status, loginRespData, loginResp.headers);
 
             if (loginResp.status === 200) {
                 console.log('connected');
                 let redirect_url = '';
-                if (loginResp.data.respMultiRegionName) {
-                    redirect_url = `https://${this.login_host}${loginResp.data.respMultiRegionName[1]}`;
-                } else if (loginResp.data.redirectURL) {
-                    redirect_url = `https://${this.login_host}${loginResp.data.redirectURL}`;
+                if (loginRespData.respMultiRegionName) {
+                    redirect_url = `https://${this.login_host}${loginRespData.respMultiRegionName[1]}`;
+                } else if (loginRespData.redirectURL) {
+                    redirect_url = `https://${this.login_host}${loginRespData.redirectURL}`;
                 } else {
                     this.connected = false;
                     return false;
@@ -206,12 +163,12 @@ export class FusionSolarAPI {
     }
 
     private startSessionMonitor(): void {
-        /*if (this.sessionMonitor) return; // already running
-    this.sessionMonitor = setInterval(() => {
-      if (!this.connected) {
-        this.renewSession();
-      }
-    }, 60_000); // every 60 seconds*/
+        if (this.sessionMonitor) return; // already running
+        this.sessionMonitor = setInterval(() => {
+            if (!this.connected) {
+                this.renewSession();
+            }
+        }, 60_000); // every 60 seconds
     }
 
     private stopSessionMonitor(): void {
@@ -242,18 +199,22 @@ export class FusionSolarAPI {
             const roarandParams = {};
 
             console.log(`Getting Roarand at: ${roarandUrl}`);
-            const roarandResponse = await axios.get(roarandUrl, {
+            const query = new URLSearchParams(roarandParams).toString();
+            const urlWithParams = `${roarandUrl}?${query}`;
+
+            const roarandResponse = await fetch(urlWithParams, {
+                method: 'GET',
                 headers: roarandHeaders,
-                withCredentials: true,
-                params: roarandParams,
+                credentials: 'include',
             });
-            this.csrf = roarandResponse.data.payload;
+            const responseData = await roarandResponse.json();
+            this.csrf = responseData.payload;
             this.csrf_time = new Date();
             console.log(`CSRF refreshed: ${this.csrf}`);
         }
     }
 
-    async getStationList(): Promise<any> {
+    private async getStationList(): Promise<any> {
         this.refreshCsrf();
 
         const stationUrl = `https://${this.data_host}/rest/pvms/web/station/v1/station/station-list`;
@@ -287,25 +248,15 @@ export class FusionSolarAPI {
         };
 
         console.log(`Getting Station at: ${stationUrl}`);
-        const stationResponse = await axios.post(stationUrl, stationPayload, {
+        const stationResponse = await fetch(stationUrl, {
+            method: 'POST',
             headers: stationHeaders,
-            withCredentials: true,
+            body: JSON.stringify(stationPayload),
+            credentials: 'include',
         });
-        const jsonResponse = stationResponse.data;
-        console.log(`Station info: ${stationResponse.data}`);
+        const jsonResponse = await stationResponse.json();
+        console.log(`Station info: ${jsonResponse}`);
         return jsonResponse;
-    }
-
-    getDeviceValue(
-        deviceId: string,
-        deviceType: DeviceType,
-        output: Record<string, number | string | null>,
-        defaultValue: number = 0
-    ): number | string | Date {
-        if (deviceType === DeviceType.SENSOR_TIME) {
-            return new Date();
-        }
-        return output[deviceId.toLowerCase().replace(/ /g, '_')] ?? defaultValue;
     }
 
     async getDevices(): Promise<any> {
@@ -330,6 +281,7 @@ export class FusionSolarAPI {
 
         if (response.ok) {
             const jsonBody = await response.json();
+            console.log('energy flow response: ', JSON.stringify(jsonBody));
 
             const result = {
                 gridFlow: 0,
@@ -355,6 +307,9 @@ export class FusionSolarAPI {
             for (const link of jsonBody.data.flow.links ?? []) {
                 if (link.description.label === 'neteco.pvms.energy.flow.input.power') {
                     result.solarGeneration = parseFloat(link.description.value);
+                }
+                if (link.description.label === 'neteco.pvms.energy.flow.buy.power') {
+                    result.gridFlow = parseFloat(link.description.value);
                 }
             }
 

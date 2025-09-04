@@ -1,6 +1,4 @@
 import 'dotenv/config';
-import { logger } from './logging';
-import { normalize } from './mapping';
 import { FusionSolarAPI } from './FusionSolarAPI';
 
 function env(name: string, fallback?: string): string {
@@ -10,7 +8,7 @@ function env(name: string, fallback?: string): string {
 }
 
 const stop = () => {
-    logger.info('Shutting down...');
+    console.log('Shutting down...');
 };
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
