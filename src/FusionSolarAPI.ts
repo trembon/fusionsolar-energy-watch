@@ -1,5 +1,6 @@
 import { URL } from 'url';
 import { encryptPassword, generateNonce } from './utils';
+import { EnergyFlowResult } from './interfaces/fusion-solar-interfaces';
 
 export class FusionSolarAPI {
     private user: string;
@@ -130,52 +131,32 @@ export class FusionSolarAPI {
                             this.connected = true;
                             return true;
                         } else {
-                            console.log('dp session not found in cookie');
+                            console.error('FusionSolar :: dp session not found in cookie');
                         }
                     } else {
-                        console.log('cookies in redirect response was not found');
+                        console.error('FusionSolar :: cookies in redirect response was not found');
                     }
                 } else {
-                    console.log('invalid response status from auth redirect', redirectAuthResp.status);
+                    console.error('FusionSolar :: invalid response status from auth redirect', redirectAuthResp.status);
                 }
             } else {
-                console.log('invalid login');
+                console.error('FusionSolar :: invalid login');
             }
         } catch (err) {
-            console.error('Login failed:', err);
+            console.error('FusionSolar :: Login failed:', err);
         }
 
         this.connected = false;
         return false;
     }
 
-    logout(): boolean {
-        this.connected = false;
-        this.stopSessionMonitor();
-        return true;
-    }
-
-    private renewSession(): void {
-        console.info('Renewing session...');
+    async renewSession(): Promise<boolean> {
         this.connected = false;
         this.dp_session = '';
-        this.login();
-    }
+        this.csrf = null;
+        this.csrf_time = null;
 
-    private startSessionMonitor(): void {
-        if (this.sessionMonitor) return; // already running
-        this.sessionMonitor = setInterval(() => {
-            if (!this.connected) {
-                this.renewSession();
-            }
-        }, 60_000); // every 60 seconds
-    }
-
-    private stopSessionMonitor(): void {
-        if (this.sessionMonitor) {
-            clearInterval(this.sessionMonitor);
-            this.sessionMonitor = null;
-        }
+        return await this.login();
     }
 
     private async refreshCsrf(): Promise<void> {
@@ -259,7 +240,7 @@ export class FusionSolarAPI {
         return jsonResponse;
     }
 
-    async getDevices(): Promise<any> {
+    async getEnergyFlow(): Promise<EnergyFlowResult | undefined> {
         this.refreshCsrf();
 
         const cookies = `locale=en-us; dp-session=${this.dp_session}`;
@@ -283,7 +264,7 @@ export class FusionSolarAPI {
             const jsonBody = await response.json();
             console.log('energy flow response: ', JSON.stringify(jsonBody));
 
-            const result = {
+            const result: EnergyFlowResult = {
                 gridFlow: 0,
                 batteryFlow: 0,
                 batteryChargeLevel: 0,
@@ -292,45 +273,34 @@ export class FusionSolarAPI {
             };
 
             for (const node of jsonBody.data.flow.nodes ?? []) {
-                if (node.name === 'neteco.pvms.devTypeLangKey.string') {
-                    result.gridFlow = node.value;
-                }
                 if (node.name === 'neteco.pvms.KPI.kpiView.electricalLoad') {
+                    // house energy usage
                     result.houseConsumption = node.value;
-                }
-                if (node.name === 'neteco.pvms.devTypeLangKey.energy_store') {
-                    result.batteryFlow = node.value;
-                    result.batteryChargeLevel = node.deviceTips.SOC;
+                } else if (node.name === 'neteco.pvms.devTypeLangKey.energy_store') {
+                    // battery energy flow and current charge level
+                    result.batteryFlow = parseFloat(node.deviceTips.BATTERY_POWER);
+                    result.batteryChargeLevel = parseFloat(node.deviceTips.SOC);
+                } else if (node.name === 'neteco.pvms.devTypeLangKey.string') {
+                    // energy generation by solar panels
+                    result.solarGeneration = node.value;
                 }
             }
 
             for (const link of jsonBody.data.flow.links ?? []) {
-                if (link.description.label === 'neteco.pvms.energy.flow.input.power') {
-                    result.solarGeneration = parseFloat(link.description.value);
-                }
                 if (link.description.label === 'neteco.pvms.energy.flow.buy.power') {
+                    // grid flow (buy/sell)
                     result.gridFlow = parseFloat(link.description.value);
+                    if (link.toNode === '2') {
+                        result.gridFlow = -result.gridFlow;
+                    }
                 }
             }
-
-            // node - neteco.pvms.devTypeLangKey.energy_store = batteri
-            // value = hur mycket batteriet laddas med
-            // deviceTips.SOC = % laddning i batteriet
-
-            // node - neteco.pvms.KPI.kpiView.electricalLoad = huset
-            // value = hur mycket el som huset använder
-
-            // node - neteco.pvms.devTypeLangKey.string = cellerna
-            // value = hur mycket el som genereras just nu
-
-            // link - neteco.pvms.energy.flow.buy.power = elnätet
-            // value = hur mycket el som säljs eller köps från nätet
 
             return result;
         } else {
             console.log('invalid response from getDevices:', response.status);
         }
 
-        return {};
+        return undefined;
     }
 }
