@@ -1,0 +1,25 @@
+{
+  "name": "fusionsolar-energy-watch",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "nodemon",
+    "build": "ncc build src/index.ts -o dist"
+  },
+  "author": "trembon",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.11.0",
+    "date-fns": "^4.1.0",
+    "pino": "^9.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@vercel/ncc": "^0.38.3",
+    "dotenv": "^17.2.1",
+    "nodemon": "^3.1.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
+}
