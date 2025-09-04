@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
-import { FusionSolarAPI } from './FusionSolarAPI';
+import { FusionSolarAPI } from './fusion-solar-api';
 import IConfig, { readConfig } from './interfaces/config';
 import { EnergyFlowResult } from './interfaces/fusion-solar-interfaces';
 
