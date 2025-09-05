@@ -7,7 +7,7 @@ export class FusionSolarAPI {
     private pwd: string;
     private login_host: string;
 
-    private station: string | null = null;
+    public station: string | null = null;
     private battery_capacity: number | null = null;
     private data_host: string | null = null;
     private dp_session: string = '';

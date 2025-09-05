@@ -3,6 +3,7 @@ import express from 'express';
 import { FusionSolarAPI } from './fusion-solar-api';
 import IConfig, { readConfig } from './interfaces/config';
 import { EnergyFlowResult } from './interfaces/fusion-solar-interfaces';
+import { getChangedProperties } from './utils';
 
 console.log('App :: Starting');
 
@@ -60,18 +61,59 @@ async function main() {
                 process.exit(1);
             }
         }
-        //var changes = detectUpdates(state, newState);
+
+        var changes = getChangedProperties(energyFlow, newEnergyFlow);
         energyFlow = newEnergyFlow;
 
-        //console.log('App :: update processed', changes);
+        for (const key of changes) {
+            const payload = {
+                id: fs.station,
+                property: key,
+                value: energyFlow[key],
+                timestamp: new Date().toISOString(),
+            };
+
+            try {
+                const response = await fetch(config.webhooks.energyUpdates, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`request failed: ${response.status} ${response.statusText}`);
+                }
+                console.log('App :: Webhook sent successfully', config.webhooks.energyUpdates, payload);
+            } catch (error) {
+                console.error('App :: Error sending webhook:', error);
+            }
+        }
+
+        console.log('App :: update processed', changes);
     }, config.server.pollInterval * 1000);
 
     app.get('/', (req, res) => {
         res.json([
             {
+                url: '/devices',
+                method: 'GET',
+                info: 'List of devices',
+            },
+            {
                 url: '/energy-flow',
                 method: 'GET',
                 info: 'List current energy flow',
+            },
+        ]);
+    });
+
+    app.get('/devices', (req, res) => {
+        res.json([
+            {
+                id: fs.station,
+                name: 'FusionSolar',
             },
         ]);
     });
