@@ -8,15 +8,13 @@ export class FusionSolarAPI {
     private login_host: string;
 
     public station: string | null = null;
+
     private battery_capacity: number | null = null;
     private data_host: string | null = null;
     private dp_session: string = '';
     private connected: boolean = false;
-    private last_session_time: Date | null = null;
     private csrf: string | null = null;
     private csrf_time: Date | null = null;
-
-    private sessionMonitor: NodeJS.Timeout | null = null;
 
     constructor(user: string, pwd: string, login_host: string) {
         this.user = user;
@@ -25,8 +23,9 @@ export class FusionSolarAPI {
     }
 
     async login(): Promise<boolean> {
+        if (this.connected) return true;
+
         const publicKeyUrl = `https://${this.login_host}/unisso/pubkey`;
-        console.debug(`Getting Public Key at: ${publicKeyUrl}`);
 
         let response: Response;
         try {
@@ -38,7 +37,6 @@ export class FusionSolarAPI {
         }
 
         const pubkeyData = await response.json();
-        console.debug('Pubkey Response:', pubkeyData);
 
         const pubKeyPem = pubkeyData.pubKey;
         const timeStamp = pubkeyData.timeStamp;
@@ -70,10 +68,7 @@ export class FusionSolarAPI {
             });
             const loginRespData = await loginResp.json();
 
-            console.debug('Login Response:', loginResp.status, loginRespData, loginResp.headers);
-
             if (loginResp.status === 200) {
-                console.log('connected');
                 let redirect_url = '';
                 if (loginRespData.respMultiRegionName) {
                     redirect_url = `https://${this.login_host}${loginRespData.respMultiRegionName[1]}`;
@@ -83,8 +78,6 @@ export class FusionSolarAPI {
                     this.connected = false;
                     return false;
                 }
-
-                console.log('Redirect URL:', redirect_url);
 
                 const redirectAuthResp = await fetch(redirect_url, {
                     redirect: 'manual',
@@ -97,16 +90,11 @@ export class FusionSolarAPI {
                     },
                 });
 
-                console.log('redirectAuthResp response:', redirectAuthResp.status, redirectAuthResp.headers);
-
-                console.log('data host pre:', redirectAuthResp.headers.get('location'));
                 this.data_host = new URL(redirectAuthResp.headers.get('location')).host;
 
-                console.log('data host:', this.data_host);
                 if (redirectAuthResp.status === 200 || redirectAuthResp.status === 302) {
                     const cookies: string[] = redirectAuthResp.headers.getSetCookie();
                     if (cookies && cookies.length > 0) {
-                        console.log('cookies found!', cookies);
                         let dpSession = undefined;
                         cookies[0].split(';').forEach((x) => {
                             if (x.startsWith('dp-session=')) {
@@ -115,13 +103,12 @@ export class FusionSolarAPI {
                         });
 
                         if (dpSession) {
-                            console.log('dp session found!', dpSession);
                             this.connected = true;
                             this.dp_session = dpSession;
-                            this.last_session_time = new Date();
+
                             await this.refreshCsrf();
+
                             var stationList = await this.getStationList();
-                            console.log('station list', JSON.stringify(stationList.data.list[0]));
                             this.station = stationList.data.list[0].dn;
 
                             if (!this.battery_capacity || this.battery_capacity == 0) {
@@ -179,7 +166,6 @@ export class FusionSolarAPI {
             };
             const roarandParams = {};
 
-            console.log(`Getting Roarand at: ${roarandUrl}`);
             const query = new URLSearchParams(roarandParams).toString();
             const urlWithParams = `${roarandUrl}?${query}`;
 
@@ -188,10 +174,10 @@ export class FusionSolarAPI {
                 headers: roarandHeaders,
                 credentials: 'include',
             });
+
             const responseData = await roarandResponse.json();
             this.csrf = responseData.payload;
             this.csrf_time = new Date();
-            console.log(`CSRF refreshed: ${this.csrf}`);
         }
     }
 
@@ -228,7 +214,6 @@ export class FusionSolarAPI {
             locale: 'en_US',
         };
 
-        console.log(`Getting Station at: ${stationUrl}`);
         const stationResponse = await fetch(stationUrl, {
             method: 'POST',
             headers: stationHeaders,
@@ -236,7 +221,6 @@ export class FusionSolarAPI {
             credentials: 'include',
         });
         const jsonResponse = await stationResponse.json();
-        console.log(`Station info: ${jsonResponse}`);
         return jsonResponse;
     }
 
@@ -262,7 +246,6 @@ export class FusionSolarAPI {
 
         if (response.ok) {
             const jsonBody = await response.json();
-            console.log('energy flow response: ', JSON.stringify(jsonBody));
 
             const result: EnergyFlowResult = {
                 gridFlow: 0,
@@ -298,7 +281,7 @@ export class FusionSolarAPI {
 
             return result;
         } else {
-            console.log('invalid response from getDevices:', response.status);
+            console.log('FusionSolar :: invalid response from getDevices:', response.status);
         }
 
         return undefined;
