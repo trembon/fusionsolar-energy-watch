@@ -69,24 +69,24 @@ async function main() {
             let id = fs.station;
             switch (key) {
                 case 'solarGeneration':
-                    id += '_1';
+                    id += '_panels';
                     break;
                 case 'batteryFlow':
-                    id += '_2';
+                    id += '_battery';
                     break;
                 case 'batteryChargeLevel':
-                    id += '_2';
+                    id += '_battery';
                     break;
                 case 'gridFlow':
-                    id += '_3';
+                    id += '_grid';
                     break;
                 case 'houseConsumption':
-                    id += '_4';
+                    id += '_house';
                     break;
             }
 
             const payload = {
-                id: fs.station,
+                id: id,
                 property: key,
                 value: energyFlow[key],
                 timestamp: new Date().toISOString(),
@@ -113,7 +113,7 @@ async function main() {
         console.log('App :: update processed', changes);
     }, config.server.pollInterval * 1000);
 
-    app.get('/', (req, res) => {
+    app.get('/', (_req, res) => {
         res.json([
             {
                 url: '/devices',
@@ -128,28 +128,28 @@ async function main() {
         ]);
     });
 
-    app.get('/devices', (req, res) => {
+    app.get('/devices', (_req, res) => {
         res.json([
             {
-                id: fs.station + '_1',
+                id: fs.station + '_panels',
                 name: 'FusionSolar - SolarCells',
             },
             {
-                id: fs.station + '_2',
+                id: fs.station + '_battery',
                 name: 'FusionSolar - Battery',
             },
             {
-                id: fs.station + '_3',
+                id: fs.station + '_grid',
                 name: 'FusionSolar - Grid',
             },
             {
-                id: fs.station + '_4',
+                id: fs.station + '_house',
                 name: 'FusionSolar - House',
             },
         ]);
     });
 
-    app.get('/energy-flow', (req, res) => {
+    app.get('/energy-flow', (_req, res) => {
         res.json(energyFlow);
     });
 
