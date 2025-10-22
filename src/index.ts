@@ -66,6 +66,25 @@ async function main() {
         energyFlow = newEnergyFlow;
 
         for (const key of changes) {
+            let id = fs.station;
+            switch (key) {
+                case 'solarGeneration':
+                    id += '_1';
+                    break;
+                case 'batteryFlow':
+                    id += '_2';
+                    break;
+                case 'batteryChargeLevel':
+                    id += '_2';
+                    break;
+                case 'gridFlow':
+                    id += '_3';
+                    break;
+                case 'houseConsumption':
+                    id += '_4';
+                    break;
+            }
+
             const payload = {
                 id: fs.station,
                 property: key,
@@ -112,8 +131,20 @@ async function main() {
     app.get('/devices', (req, res) => {
         res.json([
             {
-                id: fs.station,
-                name: 'FusionSolar',
+                id: fs.station + '_1',
+                name: 'FusionSolar - SolarCells',
+            },
+            {
+                id: fs.station + '_2',
+                name: 'FusionSolar - Battery',
+            },
+            {
+                id: fs.station + '_3',
+                name: 'FusionSolar - Grid',
+            },
+            {
+                id: fs.station + '_4',
+                name: 'FusionSolar - House',
             },
         ]);
     });
