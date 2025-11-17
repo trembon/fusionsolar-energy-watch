@@ -126,6 +126,11 @@ async function main() {
                 method: 'GET',
                 info: 'List current energy flow',
             },
+            {
+                url: '/set-config-signals',
+                method: 'POST',
+                info: 'Sets the payload as configuration for the battery',
+            },
         ]);
     });
 
