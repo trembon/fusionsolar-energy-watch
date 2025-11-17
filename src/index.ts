@@ -8,6 +8,7 @@ import { getChangedProperties } from './utils';
 console.log('App :: Starting');
 
 const app = express();
+app.use(express.json());
 
 let config: IConfig;
 try {
@@ -151,6 +152,12 @@ async function main() {
 
     app.get('/energy-flow', (_req, res) => {
         res.json(energyFlow);
+    });
+
+    app.post('/set-config-signals', async (req, res) => {
+        console.log('/set-config-signals', req.body);
+        const result = await fs.setConfigSignals(req.body);
+        res.json(result);
     });
 
     app.listen(config.server.port, () => {

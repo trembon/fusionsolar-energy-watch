@@ -1,6 +1,6 @@
 import { URL } from 'url';
 import { encryptPassword, generateNonce } from './utils';
-import { EnergyFlowResult } from './interfaces/fusion-solar-interfaces';
+import { DeviceResult, EnergyFlowResult } from './interfaces/fusion-solar-interfaces';
 
 export class FusionSolarAPI {
     private user: string;
@@ -15,6 +15,7 @@ export class FusionSolarAPI {
     private connected: boolean = false;
     private csrf: string | null = null;
     private csrf_time: Date | null = null;
+    private dongle_dn: string = null;
 
     constructor(user: string, pwd: string, login_host: string) {
         this.user = user;
@@ -110,6 +111,14 @@ export class FusionSolarAPI {
 
                             var stationList = await this.getStationList();
                             this.station = stationList.data.list[0].dn;
+
+                            var deviceList = await this.getDevices();
+                            const dongleDevice = deviceList.data.find((item) => item.mocTypeName === 'Dongle');
+                            if (dongleDevice) {
+                                this.dongle_dn = dongleDevice.dn;
+                            } else {
+                                console.log('dongle device not found');
+                            }
 
                             if (!this.battery_capacity || this.battery_capacity == 0) {
                                 this.battery_capacity = stationList.data.list[0].batteryCapacity;
@@ -224,6 +233,43 @@ export class FusionSolarAPI {
         return jsonResponse;
     }
 
+    private async getDevices(): Promise<DeviceResult | undefined> {
+        this.refreshCsrf();
+
+        const cookies = `locale=en-us; dp-session=${this.dp_session}`;
+        const headers = {
+            Accept: 'application/json',
+            'Accept-Encoding': 'gzip, deflate, br, zstd',
+            'Accept-Language': 'en-GB,en;q=0.9',
+            'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            Cookie: cookies,
+        };
+
+        const params = new URLSearchParams({
+            'conditionParams.checkShareStationDn': decodeURIComponent(this.station),
+            'conditionParams.parentDn': decodeURIComponent(this.station),
+            'conditionParams.curPage': '1',
+            'conditionParams.recordperpage': '10',
+            'conditionParams.sortType': 'BY_DEVICE_NAME',
+            'conditionParams.maintenance': 'false',
+        });
+        const dataAccessUrl = `https://${
+            this.data_host
+        }/rest/neteco/web/config/device/v1/device-list?${params.toString()}`;
+
+        const response = await fetch(dataAccessUrl, { headers });
+
+        if (response.ok) {
+            const jsonBody = await response.json();
+            return jsonBody;
+        } else {
+            console.log('FusionSolar :: invalid response from getDevices:', response.status);
+        }
+
+        return undefined;
+    }
+
     async getEnergyFlow(): Promise<EnergyFlowResult | undefined> {
         this.refreshCsrf();
 
@@ -281,9 +327,45 @@ export class FusionSolarAPI {
 
             return result;
         } else {
-            console.log('FusionSolar :: invalid response from getDevices:', response.status);
+            console.log('FusionSolar :: invalid response from getEnergyFlow:', response.status);
         }
 
         return undefined;
+    }
+
+    async setConfigSignals(payload: string): Promise<{ result: boolean }> {
+        const cookies = `locale=en-us; dp-session=${this.dp_session}`;
+        const headers = {
+            Accept: 'application/json',
+            'Accept-Encoding': 'gzip, deflate, br, zstd',
+            'Accept-Language': 'en-GB,en;q=0.9',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Roarand: `${this.csrf}`,
+            Origin: `https://${this.data_host}`,
+            Referer: `https://${this.data_host}/uniportal/pvmswebsite/assets/build/cloud.html`,
+            'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            Cookie: cookies,
+        };
+
+        const setConfigUrl = `https://${this.data_host}/rest/pvms/web/device/v1/deviceExt/set-config-signals`;
+        const body = `dn=${encodeURIComponent(this.dongle_dn)}&changeValues=%5B${encodeURIComponent(
+            JSON.stringify(payload)
+        )}%5D`;
+
+        const response = await fetch(setConfigUrl, {
+            headers,
+            method: 'POST',
+            body: body,
+        });
+
+        if (response.ok) {
+            const jsonBody = await response.json();
+            return { result: jsonBody.code === 0 };
+        } else {
+            console.log('FusionSolar :: invalid response from setConfigSignals:', response.status);
+        }
+
+        return { result: false };
     }
 }
