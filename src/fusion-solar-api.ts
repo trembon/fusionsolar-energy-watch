@@ -97,10 +97,12 @@ export class FusionSolarAPI {
                     const cookies: string[] = redirectAuthResp.headers.getSetCookie();
                     if (cookies && cookies.length > 0) {
                         let dpSession = undefined;
-                        cookies[0].split(';').forEach((x) => {
-                            if (x.startsWith('dp-session=')) {
-                                dpSession = x.split('=')[1];
-                            }
+                        cookies.forEach((cookie) => {
+                            cookie.split(';').forEach((x) => {
+                                if (x.startsWith('dp-session=')) {
+                                    dpSession = x.split('=')[1];
+                                }
+                            });
                         });
 
                         if (dpSession) {
