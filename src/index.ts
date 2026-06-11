@@ -30,7 +30,7 @@ async function main() {
         process.exit();
     }
 
-    let energyFlow: EnergyFlowResult;
+    let energyFlow: EnergyFlowResult | undefined;
     try {
         energyFlow = await fs.getEnergyFlow();
         if (!energyFlow) {
@@ -63,7 +63,7 @@ async function main() {
             }
         }
 
-        var changes = getChangedProperties(energyFlow, newEnergyFlow);
+        var changes = getChangedProperties(energyFlow!, newEnergyFlow);
         energyFlow = newEnergyFlow;
 
         for (const key of changes) {
@@ -161,7 +161,8 @@ async function main() {
 
     app.post('/set-config-signals', async (req, res) => {
         console.log('/set-config-signals', req.body);
-        const result = await fs.setConfigSignals(req.body);
+        const type = req.query.type || 'dongle';
+        const result = await fs.setConfigSignals(type as string, req.body);
         res.json(result);
     });
 
